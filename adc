@@ -1,0 +1,28 @@
+import boto3
+import os
+
+s3 = boto3.client('s3')
+
+def lambda_handler(event, context):
+    # Extract relevant information from the event
+    job_id = event['CodePipeline.job']['id']
+    job_data = event['CodePipeline.job']['data']
+    input_artifact = job_data['inputArtifacts'][0]
+    bucket_name = input_artifact['location']['s3Location']['bucketName']
+    object_key = input_artifact['location']['s3Location']['objectKey']
+
+    target_bucket = os.environ['TARGET_BUCKET']
+
+    # Download the artifact from the source bucket
+    download_path = '/tmp/{}'.format(object_key)
+    s3.download_file(bucket_name, object_key, download_path)
+
+    # Upload the artifact to the target S3 bucket
+    with open(download_path, 'rb') as file_data:
+        s3.upload_fileobj(file_data, target_bucket, object_key)
+
+    # Notify CodePipeline of the success
+    code_pipeline = boto3.client('codepipeline')
+    code_pipeline.put_job_success_result(jobId=job_id)
+
+    return {'statusCode': 200, 'body': 'Deployment completed.'}
